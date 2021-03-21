@@ -1,18 +1,14 @@
 # Traefik v2 + cert-manager
 
-## Install the kubernetes cluster in GCP US region
+## Create secret
 
 ```bash
-export CLUSTER_NAME="cluster-traefik-v2"
-
-gcloud container clusters create "${CLUSTER_NAME}" \
-  --zone="us-west1-a" \
-  --project="${GCLOUD_PROJECT}"
+kubectl apply -f cloudflare.yaml
 ```
 
 ## Install traefik v2
 
-```
+```bash
 helm repo add traefik https://containous.github.io/traefik-helm-chart
 helm repo update
 
@@ -22,24 +18,15 @@ helm install --namespace traefik traefik traefik/traefik --values traefik/values
 
 ## Access to the dashboard
 
-```
+```bash
 kubectl port-forward -n traefik $(kubectl get pods -n traefik --selector "app.kubernetes.io/name=traefik" --output=name) 9000:9000
-```
 
-http://127.0.0.1:9000/dashboard/
-
-## Install whoami
-
-```
-kubectl apply -f whoami/
+wget http://127.0.0.1:9000/dashboard/
 ```
 
 ## Install cert-manager
 
-```
-# Install the CustomResourceDefinition resources separately
-kubectl apply --validate=false -f https://raw.githubusercontent.com/jetstack/cert-manager/release-0.11/deploy/manifests/00-crds.yaml
-
+```bash
 # Create the namespace for cert-manager
 kubectl create namespace cert-manager
 
@@ -53,41 +40,29 @@ helm repo update
 helm install \
   cert-manager jetstack/cert-manager \
   --namespace cert-manager \
-  --version v0.14.2
+  --version v1.2.0 \
+  --set installCRDs=true
 ```
 
 - Verifying the installation
 
-```
+```bash
 kubectl get pods --namespace cert-manager
 ```
 
-- Create cluster issuer + certificate for `whoami.cert.k8s.rsletten.com`and `powpow.cert.k8s.rsletten.com`
+- Create cluster issuer
 
+```bash
+kubectl apply -f cert-manager/cluster-issuer.yaml
 ```
-kubectl apply -f cert-manager/
-```
+- Expose the traefik dashboard
 
-- Check that the certificate has been generated
-
-```
-kubectl describe certificate -n whoami whoami-cert
-kubectl describe certificate -n whoami powpow-cert
+```bash
+kubectl apply -f traefik-dashboard-ingress.yaml
 ```
 
 - Check the certificate issuer with the command:
 
-```
-echo | openssl s_client -showcerts -servername whoami.cert.k8s.rsletten.com -connect whoami.cert.k8s.rsletten.com:443 2>/dev/null | openssl x509 -inform pem -text | grep 'Issuer'
-```
-
-
-## Cleanup
-
-``````bash
-export CLUSTER_NAME="cluster-traefik-v2"
-
-gcloud container clusters delete "${CLUSTER_NAME}" \
-  --zone="us-west1-a" \
-  --project="${GCLOUD_PROJECT}"
+```bash
+echo | openssl s_client -showcerts -servername traefik.k8s.rsletten.com -connect traefik.k8s.rsletten.com:443 2>/dev/null | openssl x509 -inform pem -text
 ```
